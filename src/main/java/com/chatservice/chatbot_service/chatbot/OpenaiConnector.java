@@ -39,7 +39,7 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
-				return extractValueFromJSONResponse("content", response.body());
+				return ExtractValueFromJSONResponse("content", response.body());
 			}else{
 				return "Failed to prompt openai, error code " + response.statusCode() + ": \n" + response.body();
 			}
@@ -69,7 +69,7 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
-				return extractValueFromJSONResponse("id",response.body());
+				return ExtractValueFromJSONResponse("id",response.body());
 
 			}else{
 				return "Failed to create thread, error code " + response.statusCode() + ": \n" + response.body();
@@ -80,10 +80,10 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	}
 
 	//assistants are AI tools that may have conversations on threads, and runs are a connection between an assistant and a thread.
-	private boolean RunAssistantOnThread(String assistId, String threadId){
+	private String RunAssistantOnThread(String assistId, String threadId){
 		Error threadError = VerifyThreadConfig();
 		if(threadError != null){
-			return false;
+			return threadError.getMessage();
 		}
 		try {
 			HttpClient client = HttpClient.newHttpClient();
@@ -99,10 +99,9 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
-				return true;
+				return response.body();
 			}else{
-				System.out.println("Failed to run assistant on thread, error code " + response.statusCode() + ": \n" + response.body());
-				return false;
+				return "Failed to run assistant on thread, error code " + response.statusCode() + ": \n" + response.body();
 			}
 		} catch (Exception e) {
 			throw new RuntimeException(e);
@@ -112,7 +111,7 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	//once you have created a thread, you may send messages to it. This will respond with a confirmation message.
 	@Override
 	public String MessageThread(String message, String threadId) {
-		Error threadError = VerifyThreadConfig();
+		Error threadError = VerifyResponseConfig();
 		if(threadError != null){
 			return threadError.getMessage();
 		}
@@ -130,12 +129,7 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
-				boolean runResult = RunAssistantOnThread(assistantId, threadId); //add the assistant to the thread.
-				if(runResult){
-					return response.body();
-				}else{
-					return "Could not run assistant on thread.";
-				}
+				return RunAssistantOnThread(assistantId, threadId); //add the assistant to the thread.
 			}else{
 				return "Failed to message thread, error code " + response.statusCode() + ": \n" + response.body();
 			}
@@ -164,7 +158,14 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
-				return response.body();
+				/*response contains the entire thread of messages in the body, so we need to extract the topmost
+				(most recent) one and return the value*/
+				String JSONObject = ExtractJSONObjectFromList(1,1,response.body());
+				if(JSONObject != null){
+					return ExtractValueFromJSONResponse("value", JSONObject);
+				}else{
+					return "Failed to extract message from thread.";
+				}
 			}else{
 				return "Failed to get thread response, error code " + response.statusCode() + ": \n" + response.body();
 			}
@@ -199,11 +200,76 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	}
 	
 	//take a JSON response and return the value of a certain parameter.
-	private String extractValueFromJSONResponse(String parameter, String response) {
+	private String ExtractValueFromJSONResponse(String parameter, String response) {
        int start = response.indexOf(parameter) + parameter.length() + 4;
 
        int end = response.indexOf("\"", start);
 
        return response.substring(start, end);
+   }
+
+   //returns a JSON object from a list, with both the list and returned object represented as strings.
+   //the list goes from top line to bottom, the itemNumber determines which item is extracted, with number 1 meaning the topmost item.
+   //itemDepth is used for lists contained in other objects. The itemDepth determines how many outer braces are ignored when selecting the object.
+   private String ExtractJSONObjectFromList(int itemNumber, int itemDepth, String json){
+		if(itemNumber < 1){
+			System.out.println("Extract JSON object failure: item number may not be lower than 1.");
+			return null;
+		}
+	    if(itemDepth < 0){
+		   System.out.println("Extract JSON object failure: item depth may not be lower than 0.");
+		   return null;
+	    }
+
+		int ignoredOpeningBraces = 0;
+		int unclosedBraces = 0;
+		int objectsFound = 0;
+		Integer objectStart = null;
+		Integer objectEnd = null;
+
+		for(int i = 0; i < json.length(); i++){
+			char currentChar = json.charAt(i);
+
+			if(currentChar == '{'){
+				//if we have ignored less braces than the item depth, ignore this opening brace.
+				if(ignoredOpeningBraces < itemDepth){
+					ignoredOpeningBraces++;
+				}
+				//if the brace within the depth we want, check to see if it is the object we want.
+				else{
+					unclosedBraces++;
+
+					//having one brace unclosed indicates the start of an object at the depth we want.
+					if(unclosedBraces == 1){
+						objectsFound++;
+						if(objectsFound == itemNumber){
+							objectStart = i;
+						}
+					}
+				}
+			}
+			else if(currentChar == '}'){
+				/*if we encounter a closing bracket before finding an opening bracket at the depth we want, then no
+				object exists in the itemNumber position at the itemDepth. */
+				if(unclosedBraces < 1){
+					System.out.println("No JSON object found at the desired position.");
+					return null;
+				}
+
+				unclosedBraces--;
+
+				if(objectStart != null && unclosedBraces == 0){
+					objectEnd = i;
+					break;
+				}
+
+			}
+		}
+
+		if(objectStart == null || objectEnd == null){
+			System.out.println("No JSON object found at the desired position.");
+			return null;
+		}
+		return json.substring(objectStart, objectEnd + 1);
    }
 }
