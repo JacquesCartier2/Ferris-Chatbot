@@ -200,12 +200,29 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	}
 	
 	//take a JSON response and return the value of a certain parameter.
-	private String ExtractValueFromJSONResponse(String parameter, String response) {
-       int start = response.indexOf(parameter) + parameter.length() + 4;
+	private String ExtractValueFromJSONResponse(String property, String response) {
+       int start = response.indexOf(property) + property.length() + 4;
+	   Integer end = null;
 
-       int end = response.indexOf("\"", start);
+	   //the backslash is an escape operator and any quotation preceded by a backslash is not the end.
+	   boolean escape = false;
+	   for(int i = start; i < response.length(); i++){
+		   char currentChar = response.charAt(i);
+		   if(currentChar == '"' && !escape){
+			   end = i;
+			   break;
+		   }else if(currentChar == '\\'){
+			   escape = true;
+		   }else{
+			   escape = false;
+		   }
+	   }
 
-       return response.substring(start, end);
+	   if(end != null){
+		   return response.substring(start, end);
+	   }else {
+		   return "Could not parse " + property + ".";
+	   }
    }
 
    //returns a JSON object from a list, with both the list and returned object represented as strings.
