@@ -21,7 +21,7 @@ public class Controller {
 
     @PostMapping("/thread/{threadId}")
     public String ChatbotMessageThread(@PathVariable String threadId,@RequestBody Prompt prompt){
-        return chatbot.MessageThread(prompt.getPrompt(), threadId);
+        return chatbot.PromptThread(prompt.getPrompt(), threadId);
     }
 
     @GetMapping()

@@ -1,9 +1,12 @@
 package com.chatservice.chatbot_service.chatbot;
 
+import org.apache.logging.log4j.message.Message;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.concurrent.TimeUnit;
 
 public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	private final String key; //access key used for authorization
@@ -108,12 +111,40 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 		}
 	}
 
-	//once you have created a thread, you may send messages to it. This will respond with a confirmation message.
+	//once you have created a thread, you may send messages to it. Sending a message to openai will respond with the message object.
+	//we will also create a "run" ordering an assistant to add a new message to the thread, and wait for it to finish.
+	//then, we will retrieve all messages from the thread, extract the latest one, and return its value.
+	//in short, this function sends a message to the chatbot and returns the response.
 	@Override
-	public String MessageThread(String message, String threadId) {
+	public String PromptThread(String message, String threadId) {
 		Error threadError = VerifyResponseConfig();
 		if(threadError != null){
 			return threadError.getMessage();
+		}
+
+		boolean messageSuccess = MessageThread(message, threadId);
+
+		if(messageSuccess){
+			//have the assistant add a message to the thread, store the id of the assistant's execution on the thread.
+			String runId = ExtractValueFromJSONResponse("id", RunAssistantOnThread(assistantId, threadId));;
+
+			//returns true when the run is finished, false if not finished within maximum time.
+			boolean finishedInTime = ConfirmRunCompletion(threadId, runId, 1L, 10f);
+
+			if(finishedInTime){
+				return GetThreadResponse(threadId);
+			}else{
+				return "Assistant run timed out.";
+			}
+		}else{
+			return "Failed to message thread.";
+		}
+	}
+
+	private boolean MessageThread(String message, String threadId){
+		Error threadError = VerifyResponseConfig();
+		if(threadError != null){
+			return false;
 		}
 		try {
 			HttpClient client = HttpClient.newHttpClient();
@@ -129,12 +160,14 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
-				return RunAssistantOnThread(assistantId, threadId); //add the assistant to the thread.
+				return true;
 			}else{
-				return "Failed to message thread, error code " + response.statusCode() + ": \n" + response.body();
+				System.out.println("Failed to message thread, error code " + response.statusCode() + ": \n" + response.body());
+				return false;
 			}
 		} catch (Exception e) {
-			throw new RuntimeException(e);
+			e.printStackTrace();
+			return false;
 		}
 	}
 
@@ -168,6 +201,32 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 				}
 			}else{
 				return "Failed to get thread response, error code " + response.statusCode() + ": \n" + response.body();
+			}
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	public String GetRunStatus(String threadId, String runId) {
+		Error threadError = VerifyThreadConfig();
+		if(threadError != null){
+			return threadError.getMessage();
+		}
+		try {
+			HttpClient client = HttpClient.newHttpClient();
+
+			HttpRequest request = HttpRequest.newBuilder()
+					.uri(URI.create(threadEndpoint + "/" + threadId + "/runs/" + runId))
+					.header("Authorization", "Bearer " + key)
+					.header("OpenAI-Beta", "assistants=v2")
+					.build();
+
+			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+			if(response.statusCode() >= 200 && response.statusCode() < 300){
+				return ExtractValueFromJSONResponse("status", response.body());
+			}else{
+				return "Failed to get run, error code " + response.statusCode() + ": \n" + response.body();
 			}
 		} catch (Exception e) {
 			throw new RuntimeException(e);
@@ -211,10 +270,8 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 		   if(currentChar == '"' && !escape){
 			   end = i;
 			   break;
-		   }else if(currentChar == '\\'){
-			   escape = true;
 		   }else{
-			   escape = false;
+			   escape = (currentChar == '\\');
 		   }
 	   }
 
@@ -288,5 +345,23 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 			return null;
 		}
 		return json.substring(objectStart, objectEnd + 1);
+   }
+
+   //will check multiple times to see if a run is complete. Returns true if complete within max time, false otherwise.
+   private boolean ConfirmRunCompletion(String threadId, String runId, long interval, float maxTime){
+		long timeWaited = 0L;
+
+		for(; timeWaited <= maxTime; timeWaited += interval){
+            try {
+				if(GetRunStatus(threadId, runId).equals("completed")){
+					return true;
+				}
+                TimeUnit.SECONDS.sleep(interval);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+		return false;
    }
 }

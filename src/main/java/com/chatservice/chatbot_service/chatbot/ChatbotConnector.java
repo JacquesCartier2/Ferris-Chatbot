@@ -6,7 +6,7 @@ public interface ChatbotConnector {
     public String CreateThread();
 
     //send a message to a specific thread and return a confirmation message.
-    public String MessageThread(String message, String threadId);
+    public String PromptThread(String message, String threadId);
 
     //return the last AI response from a thread.
     public String GetThreadResponse(String threadId);
