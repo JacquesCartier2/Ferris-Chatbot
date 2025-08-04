@@ -1,11 +1,10 @@
 package com.chatservice.chatbot_service.chatbot;
 
-import org.apache.logging.log4j.message.Message;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
 public class OpenaiConnector implements ModelConnector, ChatbotConnector {
@@ -195,7 +194,8 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 				(most recent) one and return the value*/
 				String JSONObject = ExtractJSONObjectFromList(1,1,response.body());
 				if(JSONObject != null){
-					return ExtractValueFromJSONResponse("value", JSONObject);
+					String value = ExtractValueFromJSONResponse("value", JSONObject);
+					return CleanStringFormat(value);
 				}else{
 					return "Failed to extract message from thread.";
 				}
@@ -363,5 +363,18 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
         }
 
 		return false;
+   }
+
+   //prepare json data from openai to be sent as a regular string.
+   private String CleanStringFormat(String input){
+	   HashMap<String,String> replacements = new HashMap<String,String>();
+	   replacements.put("\\n", "\n");
+	   replacements.put("\\\"", "\"");
+
+	   String output = "" + input; //leave input unmodified.
+	   for(String textToReplace : replacements.keySet()){
+		   output = output.replace(textToReplace, replacements.get(textToReplace));
+	   }
+	   return output;
    }
 }
