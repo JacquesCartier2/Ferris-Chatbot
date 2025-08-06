@@ -4,6 +4,7 @@ import com.chatservice.chatbot_service.chatbot.ChatbotConnector;
 import com.chatservice.chatbot_service.chatbot.OpenaiConnector;
 import com.chatservice.chatbot_service.chatbot.ModelConnector;
 import com.chatservice.chatbot_service.constants.AppConstants;
+import com.chatservice.chatbot_service.exceptions.InvalidDataException;
 import com.chatservice.chatbot_service.model.Prompt;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,7 +17,17 @@ public class Controller {
 
     @PostMapping()
     public String ChatbotPrompt(@RequestBody Prompt prompt){
-        return model.Prompt(prompt.getPrompt());
+        String promptText = prompt.getPrompt();
+        if(promptText != null){
+            if(!promptText.isEmpty()){
+                return model.Prompt(promptText);
+            }else{
+                throw new InvalidDataException("Prompt property is empty.");
+            }
+        }else{
+            throw new InvalidDataException("Prompt property is missing.");
+        }
+
     }
 
     @PostMapping("/thread/{threadId}")
