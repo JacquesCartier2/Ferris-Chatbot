@@ -13,4 +13,16 @@ public class AppExceptionHandler {
         return new ErrorMessage(400, e.getMessage());
     }
 
+    @ExceptionHandler(OpenAITimeoutException.class)
+    @ResponseStatus(code = HttpStatus.GATEWAY_TIMEOUT)
+    public ErrorMessage handleUnauthorized(OpenAITimeoutException e) {
+        return new ErrorMessage(504, e.getMessage(), e.getResponseBody());
+    }
+
+    @ExceptionHandler(OpenAIGenericException.class)
+    @ResponseStatus(code = HttpStatus.INTERNAL_SERVER_ERROR)
+    public ErrorMessage handleUnauthorized(OpenAIGenericException e) {
+        return new ErrorMessage(500, e.getMessage(), e.getResponseBody());
+    }
+
 }

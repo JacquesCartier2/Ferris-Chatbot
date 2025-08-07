@@ -1,5 +1,8 @@
 package com.chatservice.chatbot_service.chatbot;
 
+import com.chatservice.chatbot_service.exceptions.OpenAIGenericException;
+import com.chatservice.chatbot_service.exceptions.OpenAITimeoutException;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -13,7 +16,9 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	private final String responseEndpoint; //URL of the web endpoint where you can access the response model
 	private final String threadEndpoint; //URL of the web endpoint where you can access threads (conversations with AI)
 	private final String assistantId; //id of the openai assistant that will be ran on all created threads.
-	
+	private final long runMaxSeconds = 15L; //amount of time to wait for a run to complete before throwing a timeout exception.
+	private final long runIntervalSeconds = 1L; //amount of time to between run status checks.
+
 	public OpenaiConnector() {
 		this.key = System.getenv("openai.key");
 		this.responseModel = System.getenv("openai.responseModel");
@@ -23,11 +28,8 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	}
 	
 	public String Prompt(String prompt) {
-		Error responseError = VerifyThreadConfig();
-		if(responseError != null){
-			return responseError.getMessage();
-		}
-
+		VerifyResponseConfig();
+		HttpResponse<String> response = null;
 		try {
 			HttpClient client = HttpClient.newHttpClient();
 
@@ -38,25 +40,28 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 					.POST(HttpRequest.BodyPublishers.ofString("{\"model\": \"" + responseModel + "\", \"messages\": [{\"role\": \"user\", \"content\": \"" + prompt + "\"}]}"))
 					.build();
 
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
 				return ExtractValueFromJSONResponse("content", response.body());
 			}else{
-				return "Failed to prompt openai, error code " + response.statusCode() + ": \n" + response.body();
+				throw new Exception("Failed to prompt OpenAI.");
 			}
 	       } catch (Exception e) {
-	           throw new RuntimeException(e);
-	       }
+			if(response == null){
+				throw new OpenAIGenericException(e.getMessage());
+			}else{
+				throw new OpenAIGenericException(e.getMessage(), response.body());
+			}
+
+		}
 	}
 
 	//threads represent a saved set of messages between a user and an assistant. You must create a thread to start a conversation with a chatbot.
 	@Override
 	public String CreateThread() {
-		Error threadError = VerifyThreadConfig();
-		if(threadError != null){
-			return threadError.getMessage();
-		}
+		VerifyThreadConfig();
+		HttpResponse<String> response = null;
 		try {
 			HttpClient client = HttpClient.newHttpClient();
 
@@ -68,25 +73,27 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 					.POST(HttpRequest.BodyPublishers.ofString(""))
 					.build();
 
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			System.out.println(response.body());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
 				return ExtractValueFromJSONResponse("id",response.body());
-
 			}else{
-				return "Failed to create thread, error code " + response.statusCode() + ": \n" + response.body();
+				throw new Exception("Failed to create OpenAI thread.");
 			}
 		} catch (Exception e) {
-			throw new RuntimeException(e);
+			if(response == null){
+				throw new OpenAIGenericException(e.getMessage());
+			}else{
+				throw new OpenAIGenericException(e.getMessage(), response.body());
+			}
 		}
 	}
 
 	//assistants are AI tools that may have conversations on threads, and runs are a connection between an assistant and a thread.
 	private String RunAssistantOnThread(String assistId, String threadId){
-		Error threadError = VerifyThreadConfig();
-		if(threadError != null){
-			return threadError.getMessage();
-		}
+		VerifyThreadConfig();
+		HttpResponse<String> response = null;
 		try {
 			HttpClient client = HttpClient.newHttpClient();
 
@@ -98,15 +105,19 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 					.POST(HttpRequest.BodyPublishers.ofString("{\"assistant_id\": \"" + assistId + "\"}"))
 					.build();
 
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
 				return response.body();
 			}else{
-				return "Failed to run assistant on thread, error code " + response.statusCode() + ": \n" + response.body();
+				throw new Exception("Failed to run assistant on thread.");
 			}
 		} catch (Exception e) {
-			throw new RuntimeException(e);
+			if(response == null){
+				throw new OpenAIGenericException(e.getMessage());
+			}else{
+				throw new OpenAIGenericException(e.getMessage(), response.body());
+			}
 		}
 	}
 
@@ -116,35 +127,26 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	//in short, this function sends a message to the chatbot and returns the response.
 	@Override
 	public String PromptThread(String message, String threadId) {
-		Error threadError = VerifyResponseConfig();
-		if(threadError != null){
-			return threadError.getMessage();
-		}
+		VerifyThreadConfig();
 
-		boolean messageSuccess = MessageThread(message, threadId);
+		MessageThread(message, threadId);
 
-		if(messageSuccess){
-			//have the assistant add a message to the thread, store the id of the assistant's execution on the thread.
-			String runId = ExtractValueFromJSONResponse("id", RunAssistantOnThread(assistantId, threadId));;
+		//have the assistant add a message to the thread, store the id of the assistant's execution on the thread.
+		String runId = ExtractValueFromJSONResponse("id", RunAssistantOnThread(assistantId, threadId));;
 
-			//returns true when the run is finished, false if not finished within maximum time.
-			boolean finishedInTime = ConfirmRunCompletion(threadId, runId, 1L, 10f);
+		//returns true when the run is finished, false if not finished within maximum time.
+		boolean finishedInTime = ConfirmRunCompletion(threadId, runId, 1L, 10f);
 
-			if(finishedInTime){
-				return GetThreadResponse(threadId);
-			}else{
-				return "Assistant run timed out.";
-			}
+		if(finishedInTime){
+			return GetThreadResponse(threadId);
 		}else{
-			return "Failed to message thread.";
+			throw new OpenAITimeoutException("Assistant run timed out.", "Time: " + runMaxSeconds + ", Interval: " + runIntervalSeconds);
 		}
 	}
 
-	private boolean MessageThread(String message, String threadId){
-		Error threadError = VerifyResponseConfig();
-		if(threadError != null){
-			return false;
-		}
+	private void MessageThread(String message, String threadId){
+		VerifyThreadConfig();
+		HttpResponse<String> response = null;
 		try {
 			HttpClient client = HttpClient.newHttpClient();
 
@@ -156,27 +158,27 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 					.POST(HttpRequest.BodyPublishers.ofString("{\"role\": \"user\", \"content\": \"" + message + "\"}"))
 					.build();
 
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
-				return true;
+
 			}else{
-				System.out.println("Failed to message thread, error code " + response.statusCode() + ": \n" + response.body());
-				return false;
+				throw new Exception("Failed to message OpenAI thread.");
 			}
 		} catch (Exception e) {
-			e.printStackTrace();
-			return false;
+			if(response == null){
+				throw new OpenAIGenericException(e.getMessage());
+			}else{
+				throw new OpenAIGenericException(e.getMessage(), response.body());
+			}
 		}
 	}
 
 	//this will retrieve the last message of a thread. If an assistant is running on it, the last message should be the assistant response.
 	@Override
 	public String GetThreadResponse(String threadId) {
-		Error threadError = VerifyThreadConfig();
-		if(threadError != null){
-			return threadError.getMessage();
-		}
+		VerifyThreadConfig();
+		HttpResponse<String> response = null;
 		try {
 			HttpClient client = HttpClient.newHttpClient();
 
@@ -187,7 +189,7 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 					.header("OpenAI-Beta", "assistants=v2")
 					.build();
 
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
 				/*response contains the entire thread of messages in the body, so we need to extract the topmost
@@ -197,21 +199,23 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 					String value = ExtractValueFromJSONResponse("value", JSONObject);
 					return CleanStringFormat(value);
 				}else{
-					return "Failed to extract message from thread.";
+					throw new Exception("Failed to extract message from thread.");
 				}
 			}else{
-				return "Failed to get thread response, error code " + response.statusCode() + ": \n" + response.body();
+				throw new Exception("Failed to get thread response");
 			}
 		} catch (Exception e) {
-			throw new RuntimeException(e);
+			if(response == null){
+				throw new OpenAIGenericException(e.getMessage());
+			}else{
+				throw new OpenAIGenericException(e.getMessage(), response.body());
+			}
 		}
 	}
 
 	public String GetRunStatus(String threadId, String runId) {
-		Error threadError = VerifyThreadConfig();
-		if(threadError != null){
-			return threadError.getMessage();
-		}
+		VerifyThreadConfig();
+		HttpResponse<String> response = null;
 		try {
 			HttpClient client = HttpClient.newHttpClient();
 
@@ -221,41 +225,43 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 					.header("OpenAI-Beta", "assistants=v2")
 					.build();
 
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
 				return ExtractValueFromJSONResponse("status", response.body());
 			}else{
-				return "Failed to get run, error code " + response.statusCode() + ": \n" + response.body();
+				throw new Exception("Failed to get run.");
 			}
 		} catch (Exception e) {
-			throw new RuntimeException(e);
+			if(response == null){
+				throw new OpenAIGenericException(e.getMessage());
+			}else{
+				throw new OpenAIGenericException(e.getMessage(), response.body());
+			}
 		}
 	}
 
-	//returns null if env variable are configured for using responses, returns an error if not.
-	private Error VerifyResponseConfig(){
-		if(key == null){
-			return new Error("OpenAI key not configured on server.");
+	//throws an error if any of the env variables required for using response models are not configured.
+	private void VerifyResponseConfig(){
+		if(key == null || key.isEmpty()){
+			throw new OpenAIGenericException("OpenAI key not configured on server.", "An OpenAI access key must be configured in the server's environment variables to use this endpoint.");
 		}
-		if(responseModel == null){
-			return new Error("Response model not configured on server.");
+		if(responseModel == null || responseModel.isEmpty()){
+			throw new OpenAIGenericException("OpenAI response model not configured on server.", "An OpenAI response model must be configured in the server's environment variables to use this endpoint.");
 		}
-		if(responseEndpoint == null){
-			return new Error("Response endpoint not configured on server.");
+		if(responseEndpoint == null || responseEndpoint.isEmpty()){
+			throw new OpenAIGenericException("OpenAI response endpoint not configured on server.", "The OpenAI response API endpoint must be configured in the server's environment variables to use this endpoint.");
 		}
-		return null;
 	}
 
-	//returns null if env variable are configured for using threads, returns an error if not.
-	private Error VerifyThreadConfig(){
-		if(key == null){
-			return new Error("OpenAI key not configured on server.");
+	//throws an error if any of the env variables required for using threads are not configured.
+	private void VerifyThreadConfig(){
+		if(key == null || key.isEmpty()){
+			throw new OpenAIGenericException("OpenAI key not configured on server.", "An OpenAI access key must be configured in the server's environment variables to use this endpoint.");
 		}
-		if(threadEndpoint == null){
-			return new Error("Thread endpoint not configured on server.");
+		if(threadEndpoint == null || threadEndpoint.isEmpty()){
+			throw new OpenAIGenericException("OpenAI thread endpoint not configured on server.", "The OpenAI API thread endpoint must be configured in the server's environment variables to use this endpoint.");
 		}
-		return null;
 	}
 	
 	//take a JSON response and return the value of a certain parameter.
