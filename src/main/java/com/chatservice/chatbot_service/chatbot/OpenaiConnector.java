@@ -74,7 +74,6 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 					.build();
 
 			response = client.send(request, HttpResponse.BodyHandlers.ofString());
-			System.out.println(response.body());
 
 			if(response.statusCode() >= 200 && response.statusCode() < 300){
 				return ExtractValueFromJSONResponse("id",response.body());
@@ -164,6 +163,37 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 
 			}else{
 				throw new Exception("Failed to message OpenAI thread.");
+			}
+		} catch (Exception e) {
+			if(response == null){
+				throw new OpenAIGenericException(e.getMessage());
+			}else{
+				throw new OpenAIGenericException(e.getMessage(), response.body());
+			}
+		}
+	}
+
+	//
+	public String AddContextToThread(String message, String threadId){
+		VerifyThreadConfig();
+		HttpResponse<String> response = null;
+		try {
+			HttpClient client = HttpClient.newHttpClient();
+
+			HttpRequest request = HttpRequest.newBuilder()
+					.uri(URI.create(threadEndpoint + "/" + threadId + "/messages"))
+					.header("Authorization", "Bearer " + key)
+					.header("Content-Type", "application/json")
+					.header("OpenAI-Beta", "assistants=v2")
+					.POST(HttpRequest.BodyPublishers.ofString("{\"role\": \"assistant\", \"content\": \"" + message + "\"}"))
+					.build();
+
+			response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+			if(response.statusCode() >= 200 && response.statusCode() < 300){
+				return "Context added successfully.";
+			}else{
+				throw new Exception("Failed to add context to OpenAI thread.");
 			}
 		} catch (Exception e) {
 			if(response == null){

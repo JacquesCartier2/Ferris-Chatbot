@@ -5,6 +5,7 @@ import com.chatservice.chatbot_service.chatbot.OpenaiConnector;
 import com.chatservice.chatbot_service.chatbot.ModelConnector;
 import com.chatservice.chatbot_service.constants.AppConstants;
 import com.chatservice.chatbot_service.exceptions.InvalidDataException;
+import com.chatservice.chatbot_service.model.Context;
 import com.chatservice.chatbot_service.model.Prompt;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,6 +34,11 @@ public class Controller {
     @PostMapping("/thread/{threadId}")
     public String ChatbotMessageThread(@PathVariable String threadId,@RequestBody Prompt prompt){
         return chatbot.PromptThread(prompt.getPrompt(), threadId);
+    }
+
+    @PostMapping("/thread/context/{threadId}")
+    public String ChatbotAddContextToThread(@PathVariable String threadId,@RequestBody Context context){
+        return chatbot.AddContextToThread("This conversation started at date" + context.getDate() + ", time " + context.getTime(), threadId);
     }
 
     @GetMapping()

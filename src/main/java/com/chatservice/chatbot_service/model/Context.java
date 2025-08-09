@@ -5,6 +5,7 @@ import lombok.Data;
 
 @AllArgsConstructor
 @Data
-public class Prompt {
-    String prompt;
+public class Context {
+    String date;
+    String time;
 }
