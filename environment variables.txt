@@ -1,6 +1,0 @@
-This file is not code, it only lists the expected environment variables of the project. 
-
- - openai.key: access key that is used to access openai api services.
- - openai.responseModel: name of the GPT model to use for responses (responses are one-off prompts)
- - openai.responseEndpoint: URL of the web endpoint where you can access the response model
- - openai.threadEndpoint: URL of the web endpoint where you can access threads (conversations with AI)
