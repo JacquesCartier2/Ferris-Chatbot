@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.8.34316.72
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CanvasSylScraper", "CanvasSylScraper.csproj", "{32D5D176-682C-464C-B260-299182056753}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{32D5D176-682C-464C-B260-299182056753}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{32D5D176-682C-464C-B260-299182056753}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{32D5D176-682C-464C-B260-299182056753}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{32D5D176-682C-464C-B260-299182056753}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {EEE7D0D5-56AB-4DAA-A698-425E1A81F279}
+	EndGlobalSection
+EndGlobal
