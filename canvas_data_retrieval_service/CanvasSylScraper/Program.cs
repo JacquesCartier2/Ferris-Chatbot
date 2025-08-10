@@ -19,6 +19,9 @@ namespace CanvasSylScraper {
         // New dictionaries to track course info and syllabus files
         private static Dictionary<string, List<string>> _CourseSyllabusFiles = new Dictionary<string, List<string>>();
         private static Dictionary<string, string> _CourseNames = new Dictionary<string, string>();
+        private static Dictionary<string, List<ModuleInfo>> _CourseModules = new Dictionary<string, List<ModuleInfo>>();
+
+
 
         static void Main(string[] args) {
 
@@ -48,16 +51,38 @@ namespace CanvasSylScraper {
                     var courses = GetCourses(client);
 
                     foreach (var course in courses) {
+
                         string courseName = course["name"]?.ToString();
                         string courseId = course["id"]?.ToString();
                         Console.WriteLine($"\nCourse: {courseName}");
 
-                        // Track course name
-                        _CourseNames[courseId] = courseName;
-
                         if (!courseName.Contains("SENG")) {
                             continue;
                         }
+
+
+                        _CourseNames[courseId] = courseName;
+
+                        var allModules = GetModules(client, courseId);
+                        _CourseModules[courseId] = new List<ModuleInfo>();
+
+                        foreach (var module in allModules) {
+                            string moduleName = module["name"]?.ToString();
+                            string moduleId = module["id"]?.ToString();
+                            Console.WriteLine($"  Module: {moduleName}");
+
+                            var moduleInfo = new ModuleInfo { ModuleName = moduleName };
+
+                            var items = GetSyllabusItems(client, courseId, moduleId);
+                            foreach (var item in items) {
+                                string itemName = item["title"]?.ToString();
+                                moduleInfo.Items.Add(itemName);
+                                Console.WriteLine($"    Item: {itemName}");
+                            }
+
+                            _CourseModules[courseId].Add(moduleInfo);
+                        }
+
 
                         var syllabusModules = GetSyllabusModules(client, courseId);
                         foreach (var module in syllabusModules) {
@@ -330,7 +355,10 @@ namespace CanvasSylScraper {
                         jsonObjects.Add(new {
                             ClassName = courseName,
                             SyllabusText = string.Join("\n", syllabusTexts),
-                            Assignments = assignments
+                            Assignments = assignments,
+                            Modules = _CourseModules.ContainsKey(courseId)
+                                ? _CourseModules[courseId]
+                                : new List<ModuleInfo>()
                         });
                     }
                 }
@@ -398,6 +426,11 @@ namespace CanvasSylScraper {
                 Console.WriteLine($"DOCX error ({path}): {ex.Message}");
                 return null;
             }
+        }
+
+        static List<JObject> GetModules(HttpClient client, string courseId) {
+            string url = $"{_CanvasAPIUrl}/courses/{courseId}/modules?per_page=100&access_token={_CanvasAPIKey}";
+            return SafeGetJArray(client, url);
         }
     }
 }

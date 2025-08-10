@@ -1,0 +1,4 @@
+*.vsidx
+*.vsidx
+/canvas_data_retrieval_service/CanvasSylScraper/bin
+/canvas_data_retrieval_service/CanvasSylScraper/obj/Debug
