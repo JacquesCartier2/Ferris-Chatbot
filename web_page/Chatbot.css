@@ -1,0 +1,38 @@
+.chatbotForm {
+	width: 400px;
+	height: 500px;
+	background-color: #ba0c2f;
+	margin: auto;
+	padding: 10px;
+	border-style: solid;
+	border-width: 2px;
+	overflow: auto;
+}
+
+.cbLabel {
+	color: white;
+}
+
+.cbFormLabel {
+	color: white;
+}
+
+.cbMessageLabel {
+	color: white;
+}
+
+.cbMessage {
+	color: white;
+}
+
+#prompt {
+	width: 250px;
+}
+
+#brutusIcon {
+	width: 100px;
+	height: 100px;
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
+}

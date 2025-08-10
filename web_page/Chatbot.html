@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Chatbot</title>
+		<link rel="stylesheet" href="Chatbot.css">
+	</head>
+	
+	<body>
+		<div class = "chatbotForm">
+			<form action = "http://localhost:8080/chatbot", method = "post", target = "_blank">
+				<img src = "Images/CyberBrutus.png" onClick = "nextBrutusIcon()" alt = "Brutus icon" id = "brutusIcon"/>
+				<h2 id = "cbLabel" class = "cbLabel">Ask Brutus!</h2>
+				<label for="prompt" class = "cbFormLabel">Message:</label>
+				<input type="text" id="prompt" name="prompt">
+				<button type="button" onclick="submitForm()" name = "submitButton" class = "cbButton">Send</button>
+			</form>
+			<div id = "conversation">
+			</div>
+		</div>
+		<script>
+			const conversation = document.getElementById("conversation");
+			const brutusIcons = ["Images/CyberBrutus.png", "Images/DetectiveBrutus.png", "Images/SmartBrutus.png"];
+			let threadId = null;
+			let currentBrutusIconIndex = 0;
+		
+			function submitForm(){
+				if(threadId === null){
+					startThread();
+					setTimeout(addContextToThread, 2000); //openai needs a little time to get the thread ready after creation.
+					setTimeout(promptChatbot, 2000)	//also JS likes to run this code BEFORE startThread is finished, leaving us without a thread id. 
+				}else{
+					promptChatbot();
+				}
+			}
+			
+			function promptChatbot(){
+				let promptText = document.getElementById("prompt").value;
+				promptText = promptText.trim();
+				displayMessage("You", promptText);
+				promptText = promptText.replace(/"/g, "'"); //quotation marks will break JSON format if left in. 
+				const url = "http://localhost:8080/chatbot/thread/" + threadId;
+				fetch(url, {
+				  method: "post",
+				  headers: {
+					'Accept': 'application/json',
+					'Content-Type': 'application/json'
+				  },
+
+				  body: JSON.stringify({
+					prompt: promptText
+				  })
+				})
+				.then(response => {
+					if(response.ok){
+						response.text().then(displayResponse,displayResponse);
+					}else{
+						response.json().then(displayError,displayError);
+					}
+				}).catch(error => {
+					displayError(error);
+				});
+			}
+			
+			function displayResponse(response){
+				displayMessage("Brutus", response);
+			}
+			
+			function displayError(response){
+				displayMessage("Brutus", "Error: " + response.message);
+				alert(response.detail);
+			}
+			
+			function displayMessage(sender, message){
+				conversation.innerHTML += '<h2 class = "cbMessageLabel">' + sender + ':</h2>';
+				conversation.innerHTML += '<p class = "cbMessage">' + message + '</p>';
+			}
+			
+			function startThread(){
+				const url = "http://localhost:8080/chatbot/thread";
+				fetch(url, {
+				  method: "get",
+				  headers: {
+					'Accept': 'application/json',
+					'Content-Type': 'application/json'
+				  }
+				})
+				.then(response => {
+					if(response.ok){
+						response.text().then(storeThreadId,storeThreadId);
+					}
+				}).catch(error => {
+					alert(error.message);
+				});
+			}
+			
+			function addContextToThread(){
+				const d = new Date()
+				const url = "http://localhost:8080/chatbot/thread/context/" + threadId;
+				fetch(url, {
+				  method: "post",
+				  headers: {
+					'Accept': 'application/json',
+					'Content-Type': 'application/json'
+				  },
+
+				  body: JSON.stringify({
+					date: d.toUTCString(),
+					time: d.toTimeString()
+				  })
+				})
+				.then(response => {
+					if(response.ok){
+						
+					}else{
+						response.json().then(displayError,displayError);
+					}
+				}).catch(error => {
+					displayError(error);
+				});
+			}
+			
+			function storeThreadId(response){
+				threadId = response;
+			}
+			
+			function nextBrutusIcon(){
+				if(currentBrutusIconIndex < brutusIcons.length - 1){
+					currentBrutusIconIndex++;
+				}else{
+					currentBrutusIconIndex = 0;
+				}
+				document.getElementById("brutusIcon").src = brutusIcons[currentBrutusIconIndex];
+			}
+			
+		</script>
+	</body>
+</html> 
