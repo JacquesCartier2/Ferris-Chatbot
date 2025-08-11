@@ -16,12 +16,10 @@ namespace CanvasSylScraper {
         private static string _DownloadDirectory;
         private static bool _DownloadExtraFerrisAddendum;
 
-        // New dictionaries to track course info and syllabus files
+        //Dictionaries to track course info and syllabus files
         private static Dictionary<string, List<string>> _CourseSyllabusFiles = new Dictionary<string, List<string>>();
         private static Dictionary<string, string> _CourseNames = new Dictionary<string, string>();
         private static Dictionary<string, List<ModuleInfo>> _CourseModules = new Dictionary<string, List<ModuleInfo>>();
-
-
 
         static void Main(string[] args) {
 
@@ -264,7 +262,7 @@ namespace CanvasSylScraper {
                 File.WriteAllBytes(path, fileBytes);
                 Console.WriteLine($"      File saved: {path}");
 
-                // Track this syllabus file for the course
+                //Track this syllabus file for the course
                 if (!_CourseSyllabusFiles.ContainsKey(courseId))
                     _CourseSyllabusFiles[courseId] = new List<string>();
 
@@ -319,12 +317,14 @@ namespace CanvasSylScraper {
             foreach (var a in assignments) {
                 results.Add(new {
                     Name = a["name"]?.ToString(),
-                    DueDate = a["due_at"]?.ToString()
+                    DueDate = a["due_at"]?.ToString(),
+                    Url = a["html_url"]?.ToString()
                 });
             }
 
             return results;
         }
+
         static void ExtractJsonFromFiles() {
             if (_DownloadDirectory.Length == 0 || !Directory.Exists(_DownloadDirectory)) {
                 Console.WriteLine("Please provide a valid directory path.");
@@ -334,14 +334,15 @@ namespace CanvasSylScraper {
             string outputFilePath = Path.Combine(_DownloadDirectory, "output.json");
 
             try {
-                var jsonObjects = new List<object>();
+                var coursesList = new List<object>();
+                var allAssignmentsWithDates = new List<(string AssignmentName, DateTime DueDate, string ClassName, string Url)>();
 
                 using (HttpClient client = new HttpClient()) {
                     foreach (var kvp in _CourseSyllabusFiles) {
                         string courseId = kvp.Key;
                         string courseName = _CourseNames.ContainsKey(courseId) ? _CourseNames[courseId] : courseId;
 
-                        // Merge syllabus text
+                        //Merge syllabus text
                         var syllabusTexts = new List<string>();
                         foreach (string file in kvp.Value) {
                             string text = ExtractText(file);
@@ -349,10 +350,21 @@ namespace CanvasSylScraper {
                                 syllabusTexts.Add(text);
                         }
 
-                        // Get assignments
+                        //Get assignments
                         var assignments = GetAssignments(client, courseId);
 
-                        jsonObjects.Add(new {
+                        //Gather all assignments with due dates globally
+                        foreach (var a in assignments) {
+                            string assignmentName = (string)a.GetType().GetProperty("Name").GetValue(a);
+                            string dueDateStr = (string)a.GetType().GetProperty("DueDate").GetValue(a);
+                            string url = (string)a.GetType().GetProperty("Url").GetValue(a);
+
+                            if (DateTime.TryParse(dueDateStr, out DateTime parsedDate) && parsedDate > DateTime.Now) {
+                                allAssignmentsWithDates.Add((assignmentName, parsedDate, courseName, url));
+                            }
+                        }
+
+                        coursesList.Add(new {
                             ClassName = courseName,
                             SyllabusText = string.Join("\n", syllabusTexts),
                             Assignments = assignments,
@@ -363,7 +375,9 @@ namespace CanvasSylScraper {
                     }
                 }
 
-                string jsonOutput = JsonConvert.SerializeObject(jsonObjects, Formatting.Indented);
+                var finalOutput = GetClosestDueDates(allAssignmentsWithDates, coursesList);
+
+                string jsonOutput = JsonConvert.SerializeObject(finalOutput, Formatting.Indented);
                 File.WriteAllText(outputFilePath, jsonOutput);
 
                 Console.WriteLine("Extraction complete. Output saved to:");
@@ -372,6 +386,26 @@ namespace CanvasSylScraper {
             catch (Exception ex) {
                 Console.WriteLine("Error: " + ex.Message);
             }
+        }
+
+        private static object GetClosestDueDates(List<(string AssignmentName, DateTime DueDate, string ClassName, string Url)> allAssignmentsWithDates, List<object> coursesList) {
+            //Approaching Due Dates
+            var closestDueDates = allAssignmentsWithDates
+                .OrderBy(a => a.DueDate)
+                .Take(3)
+                .Select(a => new {
+                    AssignmentName = a.AssignmentName,
+                    DueDate = a.DueDate.ToString("o"),
+                    ClassName = a.ClassName,
+                    Url = a.Url
+                })
+                .ToList();
+
+            var finalOutput = new {
+                ClosestDueDates = closestDueDates,
+                Courses = coursesList
+            };
+            return finalOutput;
         }
 
         static string ExtractText(string path) {
@@ -410,9 +444,8 @@ namespace CanvasSylScraper {
                     fileStream.CopyTo(memStream);
                     memStream.Position = 0;
 
-                    using (var doc = WordprocessingDocument.Open(memStream, false)) // false = read-only
+                    using (var doc = WordprocessingDocument.Open(memStream, false))
                     {
-                        // Extract all text elements and join them
                         var bodyText = doc.MainDocumentPart.Document
                             .Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>()
                             .Select(t => t.Text)
