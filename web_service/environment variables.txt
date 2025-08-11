@@ -4,3 +4,5 @@ This file is not code, it only lists the expected environment variables of the p
  - openai.responseModel: name of the GPT model to use for responses (responses are one-off prompts)
  - openai.responseEndpoint: URL of the web endpoint where you can access the response model
  - openai.threadEndpoint: URL of the web endpoint where you can access threads (conversations with AI)
+ - openai.runMaxSeconds: amount of (whole) seconds to wait for an OpenAI run to finish before throwing a time-out error.
+ - openai.runIntervalSeconds: amount of (whole) seconds to wait between each check to see if an OpenAI run is finished. 
