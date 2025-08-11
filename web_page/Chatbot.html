@@ -99,6 +99,8 @@
 				.then(response => {
 					if(response.ok){
 						response.text().then(storeThreadId,storeThreadId);
+					}else{
+						response.json().then(displayError,displayError);
 					}
 				}).catch(error => {
 					alert(error.message);
@@ -123,6 +125,7 @@
 				})
 				.then(response => {
 					if(response.ok){
+					
 					}else{
 						response.json().then(displayError,displayError);
 					}
