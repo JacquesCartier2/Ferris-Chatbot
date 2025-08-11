@@ -16,8 +16,8 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 	private final String responseEndpoint; //URL of the web endpoint where you can access the response model
 	private final String threadEndpoint; //URL of the web endpoint where you can access threads (conversations with AI)
 	private final String assistantId; //id of the openai assistant that will be ran on all created threads.
-	private final long runMaxSeconds = 15L; //amount of time to wait for a run to complete before throwing a timeout exception.
-	private final long runIntervalSeconds = 1L; //amount of time to between run status checks.
+	private Long runMaxSeconds; //amount of time to wait for a run to complete before throwing a timeout exception.
+	private Long runIntervalSeconds; //amount of time to between run status checks.
 
 	public OpenaiConnector() {
 		this.key = System.getenv("openai.key");
@@ -25,6 +25,15 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 		this.responseEndpoint = System.getenv("openai.responseEndpoint");
 		this.threadEndpoint = System.getenv("openai.threadEndpoint");
 		this.assistantId = System.getenv("openai.assistantId");
+		try{
+			this.runMaxSeconds = Long.parseLong(System.getenv("openai.runMaxSeconds"));
+			this.runIntervalSeconds = Long.parseLong(System.getenv("openai.runIntervalSeconds"));
+		}catch(Exception e){
+			e.printStackTrace();
+			this.runMaxSeconds = null;
+			this.runIntervalSeconds = null;
+		}
+
 	}
 	
 	public String Prompt(String prompt) {
@@ -134,7 +143,7 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 		String runId = ExtractValueFromJSONResponse("id", RunAssistantOnThread(assistantId, threadId));;
 
 		//returns true when the run is finished, false if not finished within maximum time.
-		boolean finishedInTime = ConfirmRunCompletion(threadId, runId, 1L, 10f);
+		boolean finishedInTime = ConfirmRunCompletion(threadId, runId, runIntervalSeconds, runMaxSeconds);
 
 		if(finishedInTime){
 			return GetThreadResponse(threadId);
@@ -293,6 +302,16 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
 			throw new OpenAIGenericException("OpenAI thread endpoint not configured on server.", "The OpenAI API thread endpoint must be configured in the server's environment variables to use this endpoint.");
 		}
 	}
+
+	//throws an error if any of the env variables required for checking status on an interval are not configured.
+	private void VerifyIntervalConfig(){
+		if(runMaxSeconds == null || runMaxSeconds <= 0){
+			throw new OpenAIGenericException("OpenAI maximum run time not configured on server.", "The amount (integer) of seconds that a run may take before throwing an error must be configured in the server's environment variables to use this endpoint.");
+		}
+		if(runIntervalSeconds == null || runIntervalSeconds <= 0){
+			throw new OpenAIGenericException("OpenAI interval time not configured on server.", "The amount (integer) of seconds to wait between checking run status must be configured in the server's environment variables to use this endpoint.");
+		}
+	}
 	
 	//take a JSON response and return the value of a certain parameter.
 	private String ExtractValueFromJSONResponse(String property, String response) {
@@ -384,8 +403,9 @@ public class OpenaiConnector implements ModelConnector, ChatbotConnector {
    }
 
    //will check multiple times to see if a run is complete. Returns true if complete within max time, false otherwise.
-   private boolean ConfirmRunCompletion(String threadId, String runId, long interval, float maxTime){
-		long timeWaited = 0L;
+   private boolean ConfirmRunCompletion(String threadId, String runId, long interval, long maxTime){
+		VerifyIntervalConfig();
+		double timeWaited = 0;
 
 		for(; timeWaited <= maxTime; timeWaited += interval){
             try {
