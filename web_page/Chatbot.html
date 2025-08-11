@@ -23,29 +23,31 @@
 			let threadId = null;
 			let currentBrutusIconIndex = 0;
 		
-			function submitForm(){
-				if(threadId === null){
-					startThread();
-					setTimeout(addContextToThread, 2000); //openai needs a little time to get the thread ready after creation.
-					setTimeout(promptChatbot, 2000)	//also JS likes to run this code BEFORE startThread is finished, leaving us without a thread id. 
-				}else{
-					promptChatbot();
-				}
+			//prompt the chatbot, if there is no existing thread start one and add context first. 
+			async function submitForm(){
+					if(threadId === null){
+						startThread();
+						setTimeout(addContextToThread, 2000);
+						setTimeout(promptChatbot, 3000);
+					}else{
+						promptChatbot();
+					}					
 			}
 			
+			//send a prompt to the chatbot and display the returned value. 
 			function promptChatbot(){
 				let promptText = document.getElementById("prompt").value;
 				promptText = promptText.trim();
 				displayMessage("You", promptText);
 				promptText = promptText.replace(/"/g, "'"); //quotation marks will break JSON format if left in. 
 				const url = "http://localhost:8080/chatbot/thread/" + threadId;
+				
 				fetch(url, {
 				  method: "post",
 				  headers: {
 					'Accept': 'application/json',
 					'Content-Type': 'application/json'
 				  },
-
 				  body: JSON.stringify({
 					prompt: promptText
 				  })
@@ -53,6 +55,7 @@
 				.then(response => {
 					if(response.ok){
 						response.text().then(displayResponse,displayResponse);
+						document.getElementById("prompt").value = "";
 					}else{
 						response.json().then(displayError,displayError);
 					}
@@ -75,6 +78,7 @@
 				conversation.innerHTML += '<p class = "cbMessage">' + message + '</p>';
 			}
 			
+			//start an thread and store the id.
 			function startThread(){
 				const url = "http://localhost:8080/chatbot/thread";
 				fetch(url, {
@@ -93,6 +97,7 @@
 				});
 			}
 			
+			//at the start of the thread, we add a message containing context about the session such as the current date and time. 
 			function addContextToThread(){
 				const d = new Date()
 				const url = "http://localhost:8080/chatbot/thread/context/" + threadId;
@@ -110,7 +115,6 @@
 				})
 				.then(response => {
 					if(response.ok){
-						
 					}else{
 						response.json().then(displayError,displayError);
 					}
