@@ -22,16 +22,22 @@
 			const brutusIcons = ["Images/CyberBrutus.png", "Images/DetectiveBrutus.png", "Images/SmartBrutus.png"];
 			let threadId = null;
 			let currentBrutusIconIndex = 0;
+			let processingRequest = false;
 		
 			//prompt the chatbot, if there is no existing thread start one and add context first. 
 			async function submitForm(){
+				if(!processingRequest){ //only process one request at a time. 
+					processingRequest = true; //will be set to false at the end of promptChatbot.
+					
 					if(threadId === null){
+						//we need these three asynchronous functions to happen sequentially, switch to better asynchronous flow control later. 
 						startThread();
 						setTimeout(addContextToThread, 2000);
 						setTimeout(promptChatbot, 3000);
 					}else{
 						promptChatbot();
-					}					
+					}
+				}
 			}
 			
 			//send a prompt to the chatbot and display the returned value. 
@@ -59,8 +65,10 @@
 					}else{
 						response.json().then(displayError,displayError);
 					}
+					processingRequest = false;
 				}).catch(error => {
 					displayError(error);
+					processingRequest = false;
 				});
 			}
 			
