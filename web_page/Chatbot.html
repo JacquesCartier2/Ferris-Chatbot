@@ -27,49 +27,52 @@
 			//prompt the chatbot, if there is no existing thread start one and add context first. 
 			async function submitForm(){
 				if(!processingRequest){ //only process one request at a time. 
-					processingRequest = true; //will be set to false at the end of promptChatbot.
+					processingRequest = true; 
 					
 					if(threadId === null){
-						//we need these three asynchronous functions to happen sequentially, switch to better asynchronous flow control later. 
-						startThread();
-						setTimeout(addContextToThread, 2000);
-						setTimeout(promptChatbot, 3000);
+						await startThread();
+						await addContextToThread();
+						await promptChatbot();
+						processingRequest = false;
 					}else{
-						promptChatbot();
+						await promptChatbot();
+						processingRequest = false;
+
 					}
 				}
 			}
 			
 			//send a prompt to the chatbot and display the returned value. 
-			function promptChatbot(){
+			async function promptChatbot(){
 				let promptText = document.getElementById("prompt").value;
 				promptText = promptText.trim();
 				displayMessage("You", promptText);
 				promptText = promptText.replace(/"/g, "'"); //quotation marks will break JSON format if left in. 
 				const url = "http://localhost:8080/chatbot/thread/" + threadId;
 				
-				fetch(url, {
-				  method: "post",
-				  headers: {
-					'Accept': 'application/json',
-					'Content-Type': 'application/json'
-				  },
-				  body: JSON.stringify({
-					prompt: promptText
-				  })
-				})
-				.then(response => {
+				try{
+					const response = await fetch(url, {
+					  method: "post",
+					  headers: {
+						'Accept': 'application/json',
+						'Content-Type': 'application/json'
+					  },
+					  body: JSON.stringify({
+						prompt: promptText
+					  })
+					});
+				
 					if(response.ok){
-						response.text().then(displayResponse,displayResponse);
+						const responseText = await response.text();
+						displayResponse(responseText);
 						document.getElementById("prompt").value = "";
 					}else{
-						response.json().then(displayError,displayError);
+						const error = await response.json();
+						displayError(error);
 					}
-					processingRequest = false;
-				}).catch(error => {
-					displayError(error);
-					processingRequest = false;
-				});
+				}catch (error) {
+					alert(error);
+				}
 			}
 			
 			function displayResponse(response){
@@ -78,7 +81,7 @@
 			
 			function displayError(response){
 				displayMessage("Brutus", "Error: " + response.message);
-				alert(response.detail);
+				//alert(response.detail);
 			}
 			
 			function displayMessage(sender, message){
@@ -87,57 +90,58 @@
 			}
 			
 			//start an thread and store the id.
-			function startThread(){
+			async function startThread(){
 				const url = "http://localhost:8080/chatbot/thread";
-				fetch(url, {
-				  method: "get",
-				  headers: {
-					'Accept': 'application/json',
-					'Content-Type': 'application/json'
-				  }
-				})
-				.then(response => {
+				
+				try {
+					const response = await fetch(url, {
+					  method: "get",
+					  headers: {
+						'Accept': 'application/json',
+						'Content-Type': 'application/json'
+					  }
+					});
+					
 					if(response.ok){
-						response.text().then(storeThreadId,storeThreadId);
+						threadId = await response.text();
 					}else{
-						response.json().then(displayError,displayError);
+						const error = await response.json();
+						displayError(error);
 					}
-				}).catch(error => {
-					alert(error.message);
-				});
+				}catch (error) {
+					alert(error);
+				}
 			}
 			
 			//at the start of the thread, we add a message containing context about the session such as the current date and time. 
-			function addContextToThread(){
+			async function addContextToThread(){
 				const d = new Date()
 				const url = "http://localhost:8080/chatbot/thread/context/" + threadId;
-				fetch(url, {
-				  method: "post",
-				  headers: {
-					'Accept': 'application/json',
-					'Content-Type': 'application/json'
-				  },
+				try {
+					const response = await fetch(url, {
+					  method: "post",
+					  headers: {
+						'Accept': 'application/json',
+						'Content-Type': 'application/json'
+					  },
 
-				  body: JSON.stringify({
-					date: d.toUTCString(),
-					time: d.toTimeString()
-				  })
-				})
-				.then(response => {
-					if(response.ok){
+					  body: JSON.stringify({
+						date: d.toUTCString(),
+						time: d.toTimeString()
+					  })
+					});
 					
+					if(response.ok){
+						
 					}else{
-						response.json().then(displayError,displayError);
+						const error = await response.json();
+						displayError(error);
 					}
-				}).catch(error => {
-					displayError(error);
-				});
+				}catch (error) {
+					alert(error);
+				}
 			}
-			
-			function storeThreadId(response){
-				threadId = response;
-			}
-			
+						
 			function nextBrutusIcon(){
 				if(currentBrutusIconIndex < brutusIcons.length - 1){
 					currentBrutusIconIndex++;
