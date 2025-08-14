@@ -38,7 +38,7 @@ public class Controller {
 
     @PostMapping("/thread/context/{threadId}")
     public String ChatbotAddContextToThread(@PathVariable String threadId,@RequestBody Context context){
-        return chatbot.AddContextToThread("This conversation started at date" + context.getDate() + ", time " + context.getTime(), threadId);
+        return chatbot.AddContextToThread("This conversation started at date " + context.getDate() + ", time " + context.getTime(), threadId);
     }
 
     @GetMapping()
@@ -50,7 +50,7 @@ public class Controller {
     public String ChatbotCreateThread(){ return chatbot.CreateThread();}
 
     @GetMapping("/thread/{threadId}")
-    public String ChatbotCreateThread(@PathVariable String threadId){ return chatbot.GetThreadResponse(threadId);}
+    public String ChatbotLatestMessage(@PathVariable String threadId){ return chatbot.GetThreadResponse(threadId);}
 
     public Controller(){
         model = new OpenaiConnector();
